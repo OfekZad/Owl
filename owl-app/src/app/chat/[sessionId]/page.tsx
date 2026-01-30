@@ -1,14 +1,13 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { MessageList } from '@/components/chat/message-list';
 import { ChatInput } from '@/components/chat/chat-input';
 import { ActivityPanel } from '@/components/activity/activity-panel';
 import { VersionList } from '@/components/versions/version-list';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
-import { History, X } from 'lucide-react';
+import { History, X, AlertCircle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import type { Message } from '@/types';
 
@@ -21,6 +20,23 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
+
+  // Check backend connectivity on mount
+  useEffect(() => {
+    const checkBackend = async () => {
+      try {
+        const response = await fetch(`${BACKEND_URL}/health`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(5000),
+        });
+        setBackendStatus(response.ok ? 'connected' : 'disconnected');
+      } catch {
+        setBackendStatus('disconnected');
+      }
+    };
+    checkBackend();
+  }, []);
 
   const handleSendMessage = useCallback(async (content: string) => {
     const userMessage: Message = {
@@ -65,14 +81,16 @@ export default function ChatPage() {
       const errorMessage: Message = {
         id: uuidv4(),
         role: 'assistant',
-        content: 'Sorry, something went wrong. Please try again.',
+        content: backendStatus === 'disconnected'
+          ? '⚠️ The Owl backend server is not connected. Please make sure the backend is running at ' + BACKEND_URL
+          : 'Sorry, something went wrong. Please try again.',
         createdAt: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
-  }, [sessionId, messages]);
+  }, [sessionId, messages, backendStatus]);
 
   return (
     <div className="flex h-screen">

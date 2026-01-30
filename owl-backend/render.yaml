@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: owl-backend
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: E2B_API_KEY
+        sync: false
+      - key: FRONTEND_URL
+        value: https://owl-ochre.vercel.app
+      - key: BLOB_READ_WRITE_TOKEN
+        sync: false
+      - key: VERCEL_TOKEN
+        sync: false
