@@ -1,109 +1,261 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { Message } from '../types/index.js';
+import { SandboxService } from './sandbox-service.js';
+import type { Message, Activity } from '../types/index.js';
+import { v4 as uuidv4 } from 'uuid';
 
-const OWL_SYSTEM_PROMPT = `You are Owl, an expert AI agent that creates web applications.
+type BroadcastCallback = (sessionId: string, activity: Activity) => void;
 
-## Your Capabilities
-- Create complete Next.js/React applications
-- Use shadcn/ui components for all UI elements
-- Write TypeScript code
-- Execute bash commands in an isolated sandbox
-- Install npm packages
-- Preview generated applications
+// Claude's tools - direct sandbox access
+const TOOLS: Anthropic.Tool[] = [
+  {
+    name: 'write_file',
+    description: 'Write or update a file. Changes appear instantly in preview via hot-reload.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: { type: 'string', description: 'File path (e.g., "app/page.tsx", "components/Button.tsx")' },
+        content: { type: 'string', description: 'Complete file content' }
+      },
+      required: ['path', 'content']
+    }
+  },
+  {
+    name: 'run_command',
+    description: 'Run a shell command. Use for npm install, etc.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        command: { type: 'string', description: 'Command to run' }
+      },
+      required: ['command']
+    }
+  }
+];
 
-## Code Generation Guidelines
-1. Always use shadcn/ui components when available
-2. Use Tailwind CSS for styling
-3. Write clean, production-ready TypeScript
-4. Create proper file structure for Next.js projects
-5. Include proper imports and exports
+// Files to include in Claude's context
+const CONTEXT_FILES = [
+  'package.json',
+  'app/layout.tsx',
+  'app/page.tsx',
+  'app/globals.css',
+  'tailwind.config.js',
+  'tailwind.config.ts'
+];
 
-## Available shadcn/ui Components
-Button, Card, Dialog, Input, Select, Textarea, Tabs, ScrollArea, Separator, Tooltip, and more.
+const SYSTEM_PROMPT = `You are Owl, an AI that builds web applications.
 
-## Workflow
-1. Understand user requirements
-2. Plan the application structure
-3. Create files using code blocks
-4. Install required dependencies
-5. Generate code for each component
-6. Iterate based on user feedback
+You have direct access to a sandbox with a Next.js project. When you write files, changes appear instantly in the preview via hot-reload.
 
-## Keep Solutions Simple
-- Only make changes that are directly requested
-- Don't add features beyond what was asked
-- A bug fix doesn't need surrounding code cleaned up`;
+## Your Tools
+- write_file: Create or update files. Hot-reload shows changes immediately.
+- run_command: Run shell commands (npm install, etc.)
 
-interface ChatResponse {
-  content: string;
-  toolCalls?: Array<{
-    id: string;
-    name: string;
-    input: Record<string, unknown>;
-    status: string;
-  }>;
-}
+## Guidelines
+1. Use Tailwind CSS for styling
+2. Keep code simple and focused
+3. After adding new dependencies to package.json, run "npm install"
+
+When the user asks for something, just build it by writing the necessary files. The preview updates automatically.
+
+## Current Project State
+The files below show the current state of the project. Modify them as needed.
+`;
 
 export class ChatService {
   private client: Anthropic | null = null;
+  private sandboxService: SandboxService;
+  private broadcastActivity: BroadcastCallback;
 
-  constructor() {
+  constructor(sandboxService: SandboxService, broadcastCallback: BroadcastCallback) {
+    this.sandboxService = sandboxService;
+    this.broadcastActivity = broadcastCallback;
+
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (apiKey && !apiKey.includes('ENCRYPTED')) {
       this.client = new Anthropic({ apiKey });
     }
   }
 
-  async chat(sessionId: string, userMessage: string, history: Message[]): Promise<ChatResponse> {
-    // If no API key configured, return a helpful response
+  async chat(sessionId: string, userMessage: string, history: Message[]): Promise<{ content: string }> {
     if (!this.client) {
-      return {
-        content: `I'm Owl, your AI web app generator!
-
-To enable full AI capabilities, please add your ANTHROPIC_API_KEY to the .env file.
-
-For now, I can help you understand what I'm capable of:
-- I can create complete Next.js applications
-- I use shadcn/ui components for beautiful UIs
-- I write TypeScript code
-- I can iterate on your designs based on feedback
-
-Once the API key is configured, just describe the app you want to build and I'll create it for you!`
-      };
+      return { content: 'Please configure ANTHROPIC_API_KEY to enable AI capabilities.' };
     }
 
-    try {
-      // Convert history to Anthropic message format
-      const messages: Anthropic.MessageParam[] = history.map((msg) => ({
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content
-      }));
+    // Ensure sandbox is running
+    const status = this.sandboxService.getSandboxStatus(sessionId);
+    if (!status.active) {
+      await this.initializeSandbox(sessionId);
+    }
 
-      // Add the new user message
-      messages.push({
-        role: 'user',
-        content: userMessage
-      });
+    // Get current file state for Claude's context
+    const fileState = await this.getFileState(sessionId);
+    const systemPromptWithState = SYSTEM_PROMPT + fileState;
 
+    // Build messages
+    const messages: Anthropic.MessageParam[] = history.map((msg) => ({
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content
+    }));
+    messages.push({ role: 'user', content: userMessage });
+
+    let finalResponse = '';
+
+    // Agentic loop - Claude uses tools until done
+    while (true) {
       const response = await this.client.messages.create({
-        model: 'claude-opus-4-5-20251101',
+        model: 'claude-sonnet-4-20250514',
         max_tokens: 4096,
-        system: OWL_SYSTEM_PROMPT,
+        system: systemPromptWithState,
+        tools: TOOLS,
         messages
       });
 
-      // Extract text content from response
-      const textContent = response.content
-        .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-        .map((block) => block.text)
-        .join('\n');
+      // Collect text and tool uses
+      const assistantContent: Anthropic.ContentBlock[] = [];
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
 
-      return {
-        content: textContent || 'I apologize, but I could not generate a response. Please try again.'
-      };
-    } catch (error) {
-      console.error('Anthropic API error:', error);
-      throw error;
+      for (const block of response.content) {
+        assistantContent.push(block);
+
+        if (block.type === 'text') {
+          finalResponse += block.text;
+        } else if (block.type === 'tool_use') {
+          // Execute tool in sandbox
+          const result = await this.executeTool(sessionId, block.name, block.input as Record<string, string>);
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: block.id,
+            content: result
+          });
+        }
+      }
+
+      // If no tool calls, we're done
+      if (toolResults.length === 0) {
+        break;
+      }
+
+      // Add assistant message and tool results, continue loop
+      messages.push({ role: 'assistant', content: assistantContent });
+      messages.push({ role: 'user', content: toolResults });
     }
+
+    return { content: finalResponse || 'Done! Check the preview.' };
+  }
+
+  private async getFileState(sessionId: string): Promise<string> {
+    const files: string[] = [];
+
+    for (const filePath of CONTEXT_FILES) {
+      try {
+        const content = await this.sandboxService.readFile(sessionId, `/home/user/app/${filePath}`);
+        files.push(`\n### ${filePath}\n\`\`\`\n${content}\n\`\`\``);
+      } catch {
+        // File doesn't exist, skip
+      }
+    }
+
+    // Also get list of other files in app/ directory
+    try {
+      const appFiles = await this.sandboxService.listFiles(sessionId, '/home/user/app/app');
+      const otherFiles = appFiles
+        .filter(f => !f.isDir && !['layout.tsx', 'page.tsx', 'globals.css'].includes(f.name))
+        .map(f => f.name);
+
+      if (otherFiles.length > 0) {
+        files.push(`\n### Other files in app/\n${otherFiles.join(', ')}`);
+      }
+    } catch {
+      // Directory doesn't exist
+    }
+
+    return files.join('\n');
+  }
+
+  private async executeTool(sessionId: string, name: string, input: Record<string, string>): Promise<string> {
+    this.emitActivity(sessionId, 'tool_call', { tool: name, input });
+
+    try {
+      switch (name) {
+        case 'write_file': {
+          const fullPath = `/home/user/app/${input.path}`;
+          const dir = fullPath.substring(0, fullPath.lastIndexOf('/'));
+
+          // Ensure directory exists
+          await this.sandboxService.executeCommand(sessionId, `mkdir -p ${dir}`);
+          await this.sandboxService.writeFile(sessionId, fullPath, input.content);
+
+          this.emitActivity(sessionId, 'file_change', { action: 'write', path: input.path });
+          return `Written: ${input.path}`;
+        }
+
+        case 'run_command': {
+          const result = await this.sandboxService.executeCommand(sessionId, `cd /home/user/app && ${input.command}`);
+          return result.exitCode === 0
+            ? (result.stdout || 'Command completed')
+            : `Error (exit ${result.exitCode}): ${result.stderr}`;
+        }
+
+        default:
+          return `Unknown tool: ${name}`;
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Tool failed';
+      this.emitActivity(sessionId, 'error', { message: msg });
+      return `Error: ${msg}`;
+    }
+  }
+
+  private async initializeSandbox(sessionId: string): Promise<void> {
+    this.emitActivity(sessionId, 'terminal', { output: '🚀 Starting sandbox...', type: 'info' });
+
+    await this.sandboxService.createSandbox(sessionId);
+
+    // Initialize Next.js project
+    const packageJson = JSON.stringify({
+      name: 'owl-app',
+      version: '1.0.0',
+      scripts: { dev: 'next dev', build: 'next build', start: 'next start' },
+      dependencies: { next: '14.0.0', react: '18.2.0', 'react-dom': '18.2.0' }
+    }, null, 2);
+
+    const layout = `export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  );
+}`;
+
+    const page = `export default function Home() {
+  return (
+    <main className="flex min-h-screen items-center justify-center">
+      <h1 className="text-4xl font-bold">Welcome to Owl</h1>
+    </main>
+  );
+}`;
+
+    // Write initial files
+    await this.sandboxService.executeCommand(sessionId, 'mkdir -p /home/user/app/app');
+    await this.sandboxService.writeFile(sessionId, '/home/user/app/package.json', packageJson);
+    await this.sandboxService.writeFile(sessionId, '/home/user/app/app/layout.tsx', layout);
+    await this.sandboxService.writeFile(sessionId, '/home/user/app/app/page.tsx', page);
+
+    // Install and start
+    this.emitActivity(sessionId, 'terminal', { output: '📦 Installing dependencies...', type: 'info' });
+    await this.sandboxService.executeCommand(sessionId, 'cd /home/user/app && npm install');
+
+    this.emitActivity(sessionId, 'terminal', { output: '🚀 Starting dev server...', type: 'info' });
+    await this.sandboxService.startDevServer(sessionId, 3000);
+  }
+
+  private emitActivity(sessionId: string, type: Activity['type'], data: Record<string, unknown>): void {
+    this.broadcastActivity(sessionId, {
+      id: uuidv4(),
+      sessionId,
+      type,
+      data,
+      timestamp: new Date()
+    });
   }
 }

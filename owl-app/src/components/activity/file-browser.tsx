@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { ChevronRight, ChevronDown, File, Folder } from 'lucide-react';
+import { ChevronRight, ChevronDown, File, Folder, RefreshCw } from 'lucide-react';
 import type { FileNode } from '@/types';
 
 interface FileBrowserProps {
   sessionId: string;
+  backendUrl?: string;
 }
 
 interface FileTreeItemProps {
@@ -62,36 +64,72 @@ function FileTreeItem({ node, depth }: FileTreeItemProps) {
   );
 }
 
-export function FileBrowser({ sessionId }: FileBrowserProps) {
+export function FileBrowser({ sessionId, backendUrl = 'http://localhost:3001' }: FileBrowserProps) {
   const [files, setFiles] = useState<FileNode | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchFiles = useCallback(async (path: string = '/home/user/app'): Promise<FileNode | null> => {
+    try {
+      const res = await fetch(`${backendUrl}/api/sessions/${sessionId}/sandbox/files/list?path=${encodeURIComponent(path)}`);
+      if (!res.ok) {
+        if (res.status === 500) {
+          // Sandbox might not be created yet
+          return null;
+        }
+        throw new Error('Failed to fetch files');
+      }
+      const data = await res.json();
+
+      const children: FileNode[] = await Promise.all(
+        data.files
+          .filter((f: { name: string }) => !f.name.startsWith('.'))
+          .map(async (f: { name: string; isDir: boolean }) => {
+            const childPath = `${path}/${f.name}`;
+            if (f.isDir) {
+              const dirChildren = await fetchFiles(childPath);
+              return {
+                name: f.name,
+                path: childPath,
+                type: 'directory' as const,
+                children: dirChildren?.children || []
+              };
+            }
+            return {
+              name: f.name,
+              path: childPath,
+              type: 'file' as const
+            };
+          })
+      );
+
+      return {
+        name: path.split('/').pop() || 'app',
+        path,
+        type: 'directory',
+        children
+      };
+    } catch (err) {
+      console.error('Error fetching files:', err);
+      return null;
+    }
+  }, [backendUrl, sessionId]);
+
+  const loadFiles = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    const fileTree = await fetchFiles();
+    if (fileTree) {
+      setFiles(fileTree);
+    } else {
+      setError('No sandbox active or no files yet');
+    }
+    setIsLoading(false);
+  }, [fetchFiles]);
 
   useEffect(() => {
-    // Mock file tree for now - will be populated by backend
-    const mockFiles: FileNode = {
-      name: 'project',
-      path: '/',
-      type: 'directory',
-      children: [
-        {
-          name: 'src',
-          path: '/src',
-          type: 'directory',
-          children: [
-            { name: 'app', path: '/src/app', type: 'directory', children: [] },
-            { name: 'components', path: '/src/components', type: 'directory', children: [] },
-          ],
-        },
-        { name: 'package.json', path: '/package.json', type: 'file' },
-        { name: 'tsconfig.json', path: '/tsconfig.json', type: 'file' },
-      ],
-    };
-
-    setTimeout(() => {
-      setFiles(mockFiles);
-      setIsLoading(false);
-    }, 500);
-  }, [sessionId]);
+    loadFiles();
+  }, [loadFiles]);
 
   if (isLoading) {
     return (
@@ -101,19 +139,31 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
     );
   }
 
-  if (!files) {
+  if (error || !files) {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground">
-        <p>No files yet</p>
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-4">
+        <p>{error || 'No files yet'}</p>
+        <Button variant="outline" size="sm" onClick={loadFiles}>
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Refresh
+        </Button>
       </div>
     );
   }
 
   return (
-    <ScrollArea className="h-full">
-      <div className="p-2">
-        <FileTreeItem node={files} depth={0} />
+    <div className="h-full flex flex-col">
+      <div className="flex items-center justify-between p-2 border-b">
+        <span className="text-sm font-medium">Files</span>
+        <Button variant="ghost" size="icon" onClick={loadFiles}>
+          <RefreshCw className="h-4 w-4" />
+        </Button>
       </div>
-    </ScrollArea>
+      <ScrollArea className="flex-1">
+        <div className="p-2">
+          <FileTreeItem node={files} depth={0} />
+        </div>
+      </ScrollArea>
+    </div>
   );
 }

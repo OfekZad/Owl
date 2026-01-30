@@ -1,7 +1,7 @@
 import { config } from 'dotenv';
 config();
 
-import { createApp } from './app.js';
+import { createApp, setBroadcastCallback } from './app.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
 
@@ -58,6 +58,9 @@ export function broadcastActivity(sessionId: string, activity: unknown): void {
     }
   });
 }
+
+// Connect the broadcast function to the app's sandbox service
+setBroadcastCallback(broadcastActivity);
 
 server.listen(PORT, () => {
   console.log(`Owl Backend running on port ${PORT}`);

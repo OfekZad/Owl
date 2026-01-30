@@ -58,7 +58,7 @@ export function ActivityPanel({ sessionId, backendUrl = 'http://localhost:3001' 
         </TabsContent>
 
         <TabsContent value="files" className="flex-1 m-0 overflow-hidden">
-          <FileBrowser sessionId={sessionId} />
+          <FileBrowser sessionId={sessionId} backendUrl={backendUrl} />
         </TabsContent>
 
         <TabsContent value="terminal" className="flex-1 m-0 overflow-hidden">
