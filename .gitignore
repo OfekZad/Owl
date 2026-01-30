@@ -1,0 +1,8 @@
+
+# Credentials (never commit)
+API_KEYS.md
+ENCRYPTED_KEYS.txt
+VERCEL_ENCRYPTED_KEYS.txt
+VERCEL_OWL_PROJECT.txt
+*.env
+.env*
