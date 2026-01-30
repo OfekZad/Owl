@@ -4,6 +4,11 @@ import { SessionService } from './services/session-service.js';
 import { VersionService } from './services/version-service.js';
 import { ChatService } from './services/chat-service.js';
 
+// Type for requests with id param
+interface IdParams {
+  id: string;
+}
+
 export function createApp(): Express {
   const app = express();
   const sessionService = new SessionService();
@@ -32,7 +37,7 @@ export function createApp(): Express {
     }
   });
 
-  app.get('/api/sessions/:id', async (req: Request, res: Response) => {
+  app.get('/api/sessions/:id', async (req: Request<IdParams>, res: Response) => {
     try {
       const session = await sessionService.getSession(req.params.id);
       if (!session) {
@@ -45,7 +50,7 @@ export function createApp(): Express {
     }
   });
 
-  app.delete('/api/sessions/:id', async (req: Request, res: Response) => {
+  app.delete('/api/sessions/:id', async (req: Request<IdParams>, res: Response) => {
     try {
       const deleted = await sessionService.deleteSession(req.params.id);
       if (!deleted) {
@@ -59,7 +64,7 @@ export function createApp(): Express {
   });
 
   // Versions API
-  app.post('/api/sessions/:id/versions', async (req: Request, res: Response) => {
+  app.post('/api/sessions/:id/versions', async (req: Request<IdParams>, res: Response) => {
     try {
       const { filesystemSnapshot, chatHistory } = req.body;
       const version = await versionService.createVersion(
@@ -73,7 +78,7 @@ export function createApp(): Express {
     }
   });
 
-  app.get('/api/sessions/:id/versions', async (req: Request, res: Response) => {
+  app.get('/api/sessions/:id/versions', async (req: Request<IdParams>, res: Response) => {
     try {
       const versions = await versionService.getVersionsBySession(req.params.id);
       res.json({ versions });
@@ -82,7 +87,7 @@ export function createApp(): Express {
     }
   });
 
-  app.get('/api/versions/:id', async (req: Request, res: Response) => {
+  app.get('/api/versions/:id', async (req: Request<IdParams>, res: Response) => {
     try {
       const version = await versionService.getVersion(req.params.id);
       if (!version) {
@@ -95,7 +100,7 @@ export function createApp(): Express {
     }
   });
 
-  app.post('/api/versions/:id/duplicate', async (req: Request, res: Response) => {
+  app.post('/api/versions/:id/duplicate', async (req: Request<IdParams>, res: Response) => {
     try {
       const version = await versionService.duplicateVersion(req.params.id);
       if (!version) {
