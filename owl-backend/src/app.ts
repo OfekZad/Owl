@@ -4,11 +4,6 @@ import { SessionService } from './services/session-service.js';
 import { VersionService } from './services/version-service.js';
 import { ChatService } from './services/chat-service.js';
 
-// Type for requests with id param
-interface IdParams {
-  id: string;
-}
-
 export function createApp(): Express {
   const app = express();
   const sessionService = new SessionService();
@@ -37,9 +32,10 @@ export function createApp(): Express {
     }
   });
 
-  app.get('/api/sessions/:id', async (req: Request<IdParams>, res: Response) => {
+  app.get('/api/sessions/:id', async (req: Request, res: Response) => {
     try {
-      const session = await sessionService.getSession(req.params.id);
+      const id = req.params.id as string;
+      const session = await sessionService.getSession(id);
       if (!session) {
         res.status(404).json({ error: 'Session not found' });
         return;
@@ -50,9 +46,10 @@ export function createApp(): Express {
     }
   });
 
-  app.delete('/api/sessions/:id', async (req: Request<IdParams>, res: Response) => {
+  app.delete('/api/sessions/:id', async (req: Request, res: Response) => {
     try {
-      const deleted = await sessionService.deleteSession(req.params.id);
+      const id = req.params.id as string;
+      const deleted = await sessionService.deleteSession(id);
       if (!deleted) {
         res.status(404).json({ error: 'Session not found' });
         return;
@@ -64,11 +61,12 @@ export function createApp(): Express {
   });
 
   // Versions API
-  app.post('/api/sessions/:id/versions', async (req: Request<IdParams>, res: Response) => {
+  app.post('/api/sessions/:id/versions', async (req: Request, res: Response) => {
     try {
+      const id = req.params.id as string;
       const { filesystemSnapshot, chatHistory } = req.body;
       const version = await versionService.createVersion(
-        req.params.id,
+        id,
         filesystemSnapshot,
         chatHistory
       );
@@ -78,18 +76,20 @@ export function createApp(): Express {
     }
   });
 
-  app.get('/api/sessions/:id/versions', async (req: Request<IdParams>, res: Response) => {
+  app.get('/api/sessions/:id/versions', async (req: Request, res: Response) => {
     try {
-      const versions = await versionService.getVersionsBySession(req.params.id);
+      const id = req.params.id as string;
+      const versions = await versionService.getVersionsBySession(id);
       res.json({ versions });
     } catch (error) {
       res.status(500).json({ error: 'Failed to get versions' });
     }
   });
 
-  app.get('/api/versions/:id', async (req: Request<IdParams>, res: Response) => {
+  app.get('/api/versions/:id', async (req: Request, res: Response) => {
     try {
-      const version = await versionService.getVersion(req.params.id);
+      const id = req.params.id as string;
+      const version = await versionService.getVersion(id);
       if (!version) {
         res.status(404).json({ error: 'Version not found' });
         return;
@@ -100,9 +100,10 @@ export function createApp(): Express {
     }
   });
 
-  app.post('/api/versions/:id/duplicate', async (req: Request<IdParams>, res: Response) => {
+  app.post('/api/versions/:id/duplicate', async (req: Request, res: Response) => {
     try {
-      const version = await versionService.duplicateVersion(req.params.id);
+      const id = req.params.id as string;
+      const version = await versionService.duplicateVersion(id);
       if (!version) {
         res.status(404).json({ error: 'Version not found' });
         return;
