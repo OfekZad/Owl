@@ -1,6 +1,6 @@
 'use client';
 
-import { RefreshCw, ExternalLink, AlertTriangle, Download, RotateCcw } from 'lucide-react';
+import { RefreshCw, ExternalLink, AlertTriangle, Download, RotateCcw, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState, useEffect, useCallback } from 'react';
 
@@ -14,13 +14,28 @@ interface PreviewFrameProps {
 
 export function PreviewFrame({ url, sessionId, sandboxExpired, onRestart, onDownload }: PreviewFrameProps) {
   const [key, setKey] = useState(0);
-  const [iframeError, setIframeError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [loadStartTime, setLoadStartTime] = useState<number | null>(null);
+  const [showRetryButton, setShowRetryButton] = useState(false);
 
-  const handleRefresh = () => {
-    setIframeError(false);
-    setIsLoading(true);
+  const handleRefresh = useCallback(() => {
     setKey((prev) => prev + 1);
+    setIsLoading(true);
+    setLoadError(false);
+    setShowRetryButton(false);
+    setLoadStartTime(Date.now());
+  }, []);
+
+  const handleLoad = () => {
+    setIsLoading(false);
+    setLoadError(false);
+    setShowRetryButton(false);
+  };
+
+  const handleError = () => {
+    setLoadError(true);
+    setIsLoading(false);
   };
 
   const handleOpenExternal = () => {
@@ -29,17 +44,51 @@ export function PreviewFrame({ url, sessionId, sandboxExpired, onRestart, onDown
     }
   };
 
-  const handleIframeLoad = useCallback(() => {
-    setIsLoading(false);
-  }, []);
-
-  // Reset error state when URL changes
+  // Reset state when URL changes
   useEffect(() => {
     if (url) {
-      setIframeError(false);
       setIsLoading(true);
+      setLoadError(false);
+      setShowRetryButton(false);
+      setLoadStartTime(Date.now());
+      setKey((prev) => prev + 1);
     }
   }, [url]);
+
+  // Auto-retry on error (every 5 seconds)
+  useEffect(() => {
+    if (loadError && url) {
+      const timer = setTimeout(() => {
+        setKey((prev) => prev + 1);
+        setIsLoading(true);
+        setLoadError(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [loadError, url]);
+
+  // Show retry button if loading takes too long (>30 seconds)
+  useEffect(() => {
+    if (isLoading && loadStartTime && url) {
+      const timer = setTimeout(() => {
+        if (isLoading) {
+          setShowRetryButton(true);
+        }
+      }, 30000);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, loadStartTime, url]);
+
+  // Auto-retry during loading (every 8 seconds) to handle cases where iframe silently fails
+  useEffect(() => {
+    if (isLoading && url && !loadError) {
+      const timer = setTimeout(() => {
+        // Retry by changing key, which forces iframe to reload
+        setKey((prev) => prev + 1);
+      }, 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, url, key, loadError]);
 
   // Show expired state
   if (sandboxExpired) {
@@ -99,8 +148,14 @@ export function PreviewFrame({ url, sessionId, sandboxExpired, onRestart, onDown
               <Download className="h-4 w-4" />
             </Button>
           )}
-          <Button variant="ghost" size="icon" onClick={handleRefresh} title="Refresh">
-            <RefreshCw className="h-4 w-4" />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleRefresh}
+            disabled={isLoading}
+            title="Refresh"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
           <Button variant="ghost" size="icon" onClick={handleOpenExternal} title="Open in new tab">
             <ExternalLink className="h-4 w-4" />
@@ -108,21 +163,42 @@ export function PreviewFrame({ url, sessionId, sandboxExpired, onRestart, onDown
         </div>
       </div>
       <div className="flex-1 relative">
+        {/* Loading overlay */}
         {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
-            <div className="flex flex-col items-center gap-2">
-              <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Loading preview...</p>
-            </div>
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 z-10">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+            <p className="text-sm text-muted-foreground">Loading preview...</p>
+            {showRetryButton && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                className="mt-4"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Retry Now
+              </Button>
+            )}
           </div>
         )}
+
+        {/* Error state (shown briefly before auto-retry) */}
+        {loadError && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 z-10">
+            <AlertCircle className="h-8 w-8 text-yellow-500 mb-4" />
+            <p className="text-sm text-muted-foreground mb-2">Preview loading...</p>
+            <p className="text-xs text-muted-foreground">Retrying automatically...</p>
+          </div>
+        )}
+
         <iframe
           key={key}
           src={url}
           className="w-full h-full border-0"
           title="App Preview"
           sandbox="allow-scripts allow-same-origin allow-forms"
-          onLoad={handleIframeLoad}
+          onLoad={handleLoad}
+          onError={handleError}
         />
       </div>
     </div>

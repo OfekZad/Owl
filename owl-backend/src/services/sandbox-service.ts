@@ -206,10 +206,8 @@ export class SandboxService {
         type: 'success'
       });
 
-      // Broadcast preview URL
-      this.emitActivity(sessionId, 'preview_ready', {
-        url: previewUrl
-      });
+      // NOTE: preview_ready is NOT emitted here - it will be emitted by startDevServer()
+      // after confirming the dev server is actually responding
 
       return { sandboxId: sandbox.sandboxId, previewUrl };
     } catch (error) {
@@ -439,15 +437,66 @@ export class SandboxService {
       }
     });
 
-    // Wait a bit for server to start
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Wait for server to be ready by polling with retries
+    const maxRetries = 30; // 30 seconds max wait
+    let serverReady = false;
 
-    // Get and return the preview URL
+    this.emitActivity(sessionId, 'terminal', {
+      output: '⏳ Waiting for dev server to be ready...',
+      type: 'info'
+    });
+
+    for (let i = 0; i < maxRetries; i++) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      try {
+        // Check if server is responding by making a request inside the sandbox
+        const check = await sandbox.commands.run(
+          `curl -s -o /dev/null -w "%{http_code}" http://localhost:${port} 2>/dev/null || echo "000"`,
+          { timeoutMs: 5000 }
+        );
+
+        const statusCode = check.stdout.trim();
+        // Accept any successful response (200, 304) or even 404 (server is up but no route)
+        if (statusCode === '200' || statusCode === '304' || statusCode === '404' || statusCode === '302' || statusCode === '301') {
+          serverReady = true;
+          this.emitActivity(sessionId, 'terminal', {
+            output: `✅ Dev server is ready (status: ${statusCode})`,
+            type: 'success'
+          });
+          break;
+        }
+      } catch {
+        // Server not ready yet, continue waiting
+      }
+
+      // Log progress every 5 seconds
+      if ((i + 1) % 5 === 0) {
+        this.emitActivity(sessionId, 'terminal', {
+          output: `⏳ Still waiting for dev server... (${i + 1}s)`,
+          type: 'info'
+        });
+      }
+    }
+
+    // Get the preview URL
     const previewUrl = sandbox.getHost(port);
 
-    this.emitActivity(sessionId, 'preview_ready', {
-      url: `https://${previewUrl}`
-    });
+    if (serverReady) {
+      // Only emit preview_ready AFTER confirming server is healthy
+      this.emitActivity(sessionId, 'preview_ready', {
+        url: `https://${previewUrl}`
+      });
+    } else {
+      // Server didn't respond in time, but still emit with a warning
+      this.emitActivity(sessionId, 'terminal', {
+        output: '⚠️ Dev server may still be starting. Preview might need manual refresh.',
+        type: 'warning'
+      });
+      this.emitActivity(sessionId, 'preview_ready', {
+        url: `https://${previewUrl}`
+      });
+    }
 
     return `https://${previewUrl}`;
   }
