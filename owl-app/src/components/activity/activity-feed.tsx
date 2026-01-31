@@ -3,7 +3,7 @@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import type { Activity } from '@/types';
-import { Terminal, FileCode, Eye, AlertCircle, Wrench } from 'lucide-react';
+import { Terminal, FileCode, Eye, AlertCircle, Wrench, AlertTriangle } from 'lucide-react';
 
 interface ActivityFeedProps {
   activities: Activity[];
@@ -15,6 +15,7 @@ const activityIcons = {
   file_change: FileCode,
   preview_ready: Eye,
   error: AlertCircle,
+  sandbox_expired: AlertTriangle,
 };
 
 const activityColors = {
@@ -23,6 +24,7 @@ const activityColors = {
   file_change: 'text-yellow-500',
   preview_ready: 'text-purple-500',
   error: 'text-red-500',
+  sandbox_expired: 'text-orange-500',
 };
 
 export function ActivityFeed({ activities }: ActivityFeedProps) {

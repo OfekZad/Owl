@@ -38,7 +38,7 @@ export interface Session {
 export interface Activity {
   id: string;
   sessionId: string;
-  type: 'tool_call' | 'terminal' | 'file_change' | 'preview_ready' | 'error';
+  type: 'tool_call' | 'terminal' | 'file_change' | 'preview_ready' | 'error' | 'sandbox_expired';
   data: Record<string, unknown>;
   timestamp: Date;
 }
