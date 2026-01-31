@@ -285,6 +285,60 @@ export function createApp(): Express {
     }
   });
 
+  // Keep sandbox alive (ping endpoint)
+  app.post('/api/sessions/:id/sandbox/keepalive', async (req: Request, res: Response) => {
+    try {
+      const sessionId = req.params.id as string;
+      const result = await sandboxService.keepAlive(sessionId);
+      res.json(result);
+    } catch (error) {
+      console.error('Keep-alive error:', error);
+      res.status(500).json({ error: 'Failed to keep sandbox alive', alive: false });
+    }
+  });
+
+  // Download code from sandbox
+  app.get('/api/sessions/:id/sandbox/download', async (req: Request, res: Response) => {
+    try {
+      const sessionId = req.params.id as string;
+      const result = await sandboxService.downloadCode(sessionId);
+      res.json(result);
+    } catch (error) {
+      console.error('Download error:', error);
+      const message = error instanceof Error ? error.message : 'Failed to download code';
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // Restart/recreate sandbox (for when it expires)
+  app.post('/api/sessions/:id/sandbox/restart', async (req: Request, res: Response) => {
+    try {
+      const sessionId = req.params.id as string;
+      const session = await sessionService.getSession(sessionId);
+      if (!session) {
+        res.status(404).json({ error: 'Session not found' });
+        return;
+      }
+
+      // Force close any existing sandbox first
+      await sandboxService.closeSandbox(sessionId);
+
+      // Create new sandbox
+      const { sandboxId, previewUrl } = await sandboxService.createSandbox(sessionId);
+
+      // Update session with new sandbox info
+      await sessionService.updateSession(sessionId, {
+        sandboxId,
+        previewUrl
+      });
+
+      res.status(201).json({ sandboxId, previewUrl, restarted: true });
+    } catch (error) {
+      console.error('Sandbox restart error:', error);
+      res.status(500).json({ error: 'Failed to restart sandbox' });
+    }
+  });
+
   // Close sandbox
   app.delete('/api/sessions/:id/sandbox', async (req: Request, res: Response) => {
     try {
