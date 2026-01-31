@@ -35,30 +35,58 @@ const TOOLS: Anthropic.Tool[] = [
 // Files to include in Claude's context
 const CONTEXT_FILES = [
   'package.json',
+  'tailwind.config.ts',
+  'postcss.config.js',
+  'lib/utils.ts',
   'app/layout.tsx',
   'app/page.tsx',
-  'app/globals.css',
-  'tailwind.config.js',
-  'tailwind.config.ts'
+  'app/globals.css'
 ];
 
 const SYSTEM_PROMPT = `You are Owl, an AI that builds web applications.
 
-You have direct access to a sandbox with a Next.js project. When you write files, changes appear instantly in the preview via hot-reload.
+You have direct access to a sandbox with a Next.js 15 project pre-configured with Tailwind CSS and shadcn/ui foundations.
 
 ## Your Tools
 - write_file: Create or update files. Hot-reload shows changes immediately.
 - run_command: Run shell commands (npm install, etc.)
 
-## Guidelines
-1. Use Tailwind CSS for styling
-2. Keep code simple and focused
-3. After adding new dependencies to package.json, run "npm install"
+## Project Stack (Already Configured)
+- Next.js 15 with App Router
+- Tailwind CSS with CSS variables for theming
+- shadcn/ui compatible setup (lib/utils.ts with cn() helper)
+- Lucide React icons available
 
-When the user asks for something, just build it by writing the necessary files. The preview updates automatically.
+## Styling Guidelines
+1. Use Tailwind CSS utility classes
+2. Use the cn() helper from @/lib/utils for conditional classes
+3. Use CSS variable-based colors: bg-background, text-foreground, bg-primary, etc.
+4. Use shadcn patterns: rounded-md, shadow-sm, proper spacing
+
+## Component Patterns
+When building UI components, follow shadcn conventions:
+- Use forwardRef for components that accept refs
+- Use class-variance-authority (cva) for variant-based components
+- Import cn from "@/lib/utils"
+- Use semantic color variables, not hardcoded colors like purple-500 or blue-gradient
+
+## Image Placeholders
+For prototype images, use these placeholder services:
+- Cats: https://placekitten.com/{width}/{height}
+- Photos: https://picsum.photos/{width}/{height}
+- Avatars: https://i.pravatar.cc/{size}
+
+Never use emoji as placeholder images.
+
+## Build Order (CRITICAL)
+If you need to add new dependencies:
+1. Update package.json
+2. Run npm install
+3. THEN write component files
+
+When the user asks for something, build it by writing the necessary component files. The preview updates automatically via hot-reload.
 
 ## Current Project State
-The files below show the current state of the project. Modify them as needed.
 `;
 
 export class ChatService {
@@ -217,37 +245,215 @@ export class ChatService {
 
     await this.sandboxService.createSandbox(sessionId);
 
-    // Initialize Next.js project
+    // === PHASE 1: Dependencies ===
     const packageJson = JSON.stringify({
       name: 'owl-app',
       version: '1.0.0',
-      scripts: { dev: 'next dev', build: 'next build', start: 'next start' },
-      dependencies: { next: '14.0.0', react: '18.2.0', 'react-dom': '18.2.0' }
+      scripts: {
+        dev: 'next dev',
+        build: 'next build',
+        start: 'next start'
+      },
+      dependencies: {
+        next: '^15.1.0',
+        react: '^19.0.0',
+        'react-dom': '^19.0.0',
+        'lucide-react': '^0.460.0',
+        'clsx': '^2.1.1',
+        'tailwind-merge': '^2.5.4',
+        'class-variance-authority': '^0.7.0'
+      },
+      devDependencies: {
+        tailwindcss: '^3.4.15',
+        postcss: '^8.4.49',
+        autoprefixer: '^10.4.20',
+        typescript: '^5.6.3',
+        '@types/node': '^22.9.0',
+        '@types/react': '^19.0.0',
+        '@types/react-dom': '^19.0.0'
+      }
     }, null, 2);
 
-    const layout = `export default function RootLayout({ children }: { children: React.ReactNode }) {
+    // === PHASE 2: Configuration files ===
+    const tailwindConfig = `import type { Config } from "tailwindcss";
+
+const config: Config = {
+  darkMode: ["class"],
+  content: [
+    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./components/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
+        },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
+        },
+      },
+      borderRadius: {
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
+      },
+    },
+  },
+  plugins: [],
+};
+
+export default config;`;
+
+    const postcssConfig = `module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+};`;
+
+    const utilsTs = `import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}`;
+
+    // === PHASE 3: Styles ===
+    const globalsCss = `@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}`;
+
+    // === PHASE 4: Components ===
+    const layout = `import type { Metadata } from "next";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "Owl App",
+  description: "Built with Owl",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }`;
 
     const page = `export default function Home() {
   return (
-    <main className="flex min-h-screen items-center justify-center">
-      <h1 className="text-4xl font-bold">Welcome to Owl</h1>
+    <main className="flex min-h-screen items-center justify-center bg-background">
+      <div className="text-center">
+        <h1 className="text-4xl font-bold text-foreground">Welcome to Owl</h1>
+        <p className="mt-2 text-muted-foreground">Your app is ready to build</p>
+      </div>
     </main>
   );
 }`;
 
-    // Write initial files
-    await this.sandboxService.executeCommand(sessionId, 'mkdir -p /home/user/app/app');
+    // Create directory structure
+    await this.sandboxService.executeCommand(sessionId, 'mkdir -p /home/user/app/app /home/user/app/lib /home/user/app/components');
+
+    // Write Phase 1: package.json
     await this.sandboxService.writeFile(sessionId, '/home/user/app/package.json', packageJson);
+
+    // Write Phase 2: Config files (BEFORE npm install)
+    await this.sandboxService.writeFile(sessionId, '/home/user/app/tailwind.config.ts', tailwindConfig);
+    await this.sandboxService.writeFile(sessionId, '/home/user/app/postcss.config.js', postcssConfig);
+    await this.sandboxService.writeFile(sessionId, '/home/user/app/lib/utils.ts', utilsTs);
+
+    // Write Phase 3: Styles (BEFORE npm install)
+    await this.sandboxService.writeFile(sessionId, '/home/user/app/app/globals.css', globalsCss);
+
+    // Write Phase 4: Components
     await this.sandboxService.writeFile(sessionId, '/home/user/app/app/layout.tsx', layout);
     await this.sandboxService.writeFile(sessionId, '/home/user/app/app/page.tsx', page);
 
-    // Install and start
+    // === PHASE 5: Install and start server ===
     this.emitActivity(sessionId, 'terminal', { output: '📦 Installing dependencies...', type: 'info' });
     await this.sandboxService.executeCommand(sessionId, 'cd /home/user/app && npm install');
 
