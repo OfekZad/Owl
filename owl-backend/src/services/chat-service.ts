@@ -100,7 +100,25 @@ The following components are ready to use - import them from "@/components/ui/..
 
 - **Skeleton**: \`import { Skeleton } from "@/components/ui/skeleton"\`
 
-USE THESE PRE-INSTALLED COMPONENTS instead of writing your own. This ensures consistent styling and saves time.
+## Pre-installed Layout Templates
+Ready-to-use page layouts - import from "@/components/layouts/...":
+
+- **DashboardLayout**: \`import { DashboardLayout } from "@/components/layouts/dashboard-layout"\`
+  - Responsive sidebar + header + main content
+  - Collapsible sidebar on mobile
+  - Customizable nav items and title
+
+- **LandingLayout**: \`import { LandingLayout, Hero, Features } from "@/components/layouts/landing-layout"\`
+  - Header with nav + footer
+  - Hero section with CTA buttons
+  - Features grid section
+
+- **CardGrid**: \`import { CardGrid, ProductCard, UserCard } from "@/components/layouts/card-grid"\`
+  - Responsive grid (2/3/4 columns)
+  - Built-in search and filters
+  - Pre-built ProductCard and UserCard components
+
+USE THESE PRE-INSTALLED COMPONENTS AND LAYOUTS instead of writing your own. This ensures consistent styling and saves time.
 
 ## Styling Guidelines
 1. Use Tailwind CSS utility classes
@@ -1172,8 +1190,387 @@ function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>)
 
 export { Skeleton };`;
 
+    // === PHASE 4C: Layout Templates ===
+    const dashboardLayout = `"use client";
+
+import * as React from "react";
+import Link from "next/link";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Home, Settings, Users, FileText, BarChart3, Menu, X } from "lucide-react";
+
+interface NavItem {
+  title: string;
+  href: string;
+  icon: React.ReactNode;
+}
+
+interface DashboardLayoutProps {
+  children: React.ReactNode;
+  title?: string;
+  navItems?: NavItem[];
+}
+
+const defaultNavItems: NavItem[] = [
+  { title: "Dashboard", href: "/", icon: <Home className="h-4 w-4" /> },
+  { title: "Analytics", href: "/analytics", icon: <BarChart3 className="h-4 w-4" /> },
+  { title: "Users", href: "/users", icon: <Users className="h-4 w-4" /> },
+  { title: "Documents", href: "/documents", icon: <FileText className="h-4 w-4" /> },
+  { title: "Settings", href: "/settings", icon: <Settings className="h-4 w-4" /> },
+];
+
+export function DashboardLayout({ children, title = "Dashboard", navItems = defaultNavItems }: DashboardLayoutProps) {
+  const [sidebarOpen, setSidebarOpen] = React.useState(false);
+
+  return (
+    <div className="flex min-h-screen bg-background">
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      {/* Sidebar */}
+      <aside className={cn(
+        "fixed inset-y-0 left-0 z-50 w-64 transform bg-card border-r transition-transform duration-200 lg:translate-x-0 lg:static",
+        sidebarOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
+        <div className="flex h-16 items-center justify-between px-4 border-b">
+          <span className="text-lg font-semibold">App Name</span>
+          <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(false)}>
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+        <ScrollArea className="h-[calc(100vh-4rem)]">
+          <nav className="space-y-1 p-4">
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+              >
+                {item.icon}
+                {item.title}
+              </Link>
+            ))}
+          </nav>
+        </ScrollArea>
+      </aside>
+
+      {/* Main content */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <header className="sticky top-0 z-30 h-16 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+          <div className="flex h-full items-center gap-4 px-4">
+            <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(true)}>
+              <Menu className="h-5 w-5" />
+            </Button>
+            <h1 className="text-lg font-semibold">{title}</h1>
+            <div className="ml-auto flex items-center gap-2">
+              {/* Add header actions here */}
+            </div>
+          </div>
+        </header>
+
+        {/* Page content */}
+        <main className="flex-1 p-6">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}`;
+
+    const landingLayout = `import * as React from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+
+interface LandingLayoutProps {
+  children: React.ReactNode;
+  logo?: React.ReactNode;
+  navLinks?: { title: string; href: string }[];
+}
+
+export function LandingLayout({ children, logo, navLinks = [] }: LandingLayoutProps) {
+  return (
+    <div className="flex min-h-screen flex-col bg-background">
+      {/* Navigation */}
+      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container flex h-16 items-center justify-between">
+          <div className="flex items-center gap-6">
+            {logo || <span className="text-xl font-bold">Logo</span>}
+            <nav className="hidden md:flex items-center gap-6">
+              {navLinks.map((link) => (
+                <Link key={link.href} href={link.href} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                  {link.title}
+                </Link>
+              ))}
+            </nav>
+          </div>
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm">Sign In</Button>
+            <Button size="sm">Get Started</Button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main content */}
+      <main className="flex-1">
+        {children}
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t bg-muted/50">
+        <div className="container py-12">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            <div>
+              <h3 className="font-semibold mb-3">Product</h3>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li><Link href="#" className="hover:text-foreground">Features</Link></li>
+                <li><Link href="#" className="hover:text-foreground">Pricing</Link></li>
+                <li><Link href="#" className="hover:text-foreground">Docs</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-3">Company</h3>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li><Link href="#" className="hover:text-foreground">About</Link></li>
+                <li><Link href="#" className="hover:text-foreground">Blog</Link></li>
+                <li><Link href="#" className="hover:text-foreground">Careers</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-3">Resources</h3>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li><Link href="#" className="hover:text-foreground">Community</Link></li>
+                <li><Link href="#" className="hover:text-foreground">Help Center</Link></li>
+                <li><Link href="#" className="hover:text-foreground">Contact</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-3">Legal</h3>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li><Link href="#" className="hover:text-foreground">Privacy</Link></li>
+                <li><Link href="#" className="hover:text-foreground">Terms</Link></li>
+              </ul>
+            </div>
+          </div>
+          <div className="mt-8 pt-8 border-t text-center text-sm text-muted-foreground">
+            © 2024 Your Company. All rights reserved.
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+// Hero section component
+export function Hero({ title, description, primaryAction, secondaryAction }: {
+  title: string;
+  description: string;
+  primaryAction?: { label: string; href: string };
+  secondaryAction?: { label: string; href: string };
+}) {
+  return (
+    <section className="container py-24 md:py-32">
+      <div className="mx-auto max-w-3xl text-center">
+        <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">{title}</h1>
+        <p className="mt-6 text-lg text-muted-foreground">{description}</p>
+        <div className="mt-10 flex items-center justify-center gap-4">
+          {primaryAction && (
+            <Button size="lg" asChild>
+              <Link href={primaryAction.href}>{primaryAction.label}</Link>
+            </Button>
+          )}
+          {secondaryAction && (
+            <Button size="lg" variant="outline" asChild>
+              <Link href={secondaryAction.href}>{secondaryAction.label}</Link>
+            </Button>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// Features section component
+export function Features({ title, description, features }: {
+  title: string;
+  description?: string;
+  features: { title: string; description: string; icon?: React.ReactNode }[];
+}) {
+  return (
+    <section className="container py-24 bg-muted/50">
+      <div className="mx-auto max-w-2xl text-center mb-16">
+        <h2 className="text-3xl font-bold tracking-tight">{title}</h2>
+        {description && <p className="mt-4 text-muted-foreground">{description}</p>}
+      </div>
+      <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+        {features.map((feature, i) => (
+          <div key={i} className="rounded-lg border bg-card p-6">
+            {feature.icon && <div className="mb-4 text-primary">{feature.icon}</div>}
+            <h3 className="font-semibold">{feature.title}</h3>
+            <p className="mt-2 text-sm text-muted-foreground">{feature.description}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}`;
+
+    const cardGridLayout = `import * as React from "react";
+import { cn } from "@/lib/utils";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Search, Grid, List } from "lucide-react";
+
+interface CardGridProps<T> {
+  items: T[];
+  renderCard: (item: T, index: number) => React.ReactNode;
+  columns?: 2 | 3 | 4;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  onSearch?: (query: string) => void;
+  filters?: { label: string; options: { value: string; label: string }[]; onChange: (value: string) => void }[];
+  emptyMessage?: string;
+}
+
+export function CardGrid<T>({
+  items,
+  renderCard,
+  columns = 3,
+  searchable = false,
+  searchPlaceholder = "Search...",
+  onSearch,
+  filters = [],
+  emptyMessage = "No items found"
+}: CardGridProps<T>) {
+  const gridCols = {
+    2: "md:grid-cols-2",
+    3: "md:grid-cols-2 lg:grid-cols-3",
+    4: "md:grid-cols-2 lg:grid-cols-4"
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Search and filters */}
+      {(searchable || filters.length > 0) && (
+        <div className="flex flex-col sm:flex-row gap-4">
+          {searchable && (
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder={searchPlaceholder}
+                className="pl-9"
+                onChange={(e) => onSearch?.(e.target.value)}
+              />
+            </div>
+          )}
+          {filters.map((filter, i) => (
+            <Select key={i} onValueChange={filter.onChange}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder={filter.label} />
+              </SelectTrigger>
+              <SelectContent>
+                {filter.options.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ))}
+        </div>
+      )}
+
+      {/* Grid */}
+      {items.length > 0 ? (
+        <div className={cn("grid gap-6", gridCols[columns])}>
+          {items.map((item, index) => renderCard(item, index))}
+        </div>
+      ) : (
+        <div className="text-center py-12 text-muted-foreground">
+          {emptyMessage}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Example product card component
+export function ProductCard({ image, title, description, price, badge, onAction }: {
+  image?: string;
+  title: string;
+  description?: string;
+  price?: string;
+  badge?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <Card className="overflow-hidden">
+      {image && (
+        <div className="aspect-video relative bg-muted">
+          <img src={image} alt={title} className="object-cover w-full h-full" />
+          {badge && (
+            <Badge className="absolute top-2 right-2">{badge}</Badge>
+          )}
+        </div>
+      )}
+      <CardHeader>
+        <CardTitle className="line-clamp-1">{title}</CardTitle>
+        {description && <CardDescription className="line-clamp-2">{description}</CardDescription>}
+      </CardHeader>
+      <CardFooter className="flex items-center justify-between">
+        {price && <span className="text-lg font-semibold">{price}</span>}
+        {onAction && <Button size="sm" onClick={onAction}>View Details</Button>}
+      </CardFooter>
+    </Card>
+  );
+}
+
+// Example user card component
+export function UserCard({ avatar, name, role, email, onAction }: {
+  avatar?: string;
+  name: string;
+  role?: string;
+  email?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        <div className="flex items-center gap-4">
+          <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+            {avatar ? (
+              <img src={avatar} alt={name} className="h-full w-full object-cover" />
+            ) : (
+              <span className="text-lg font-semibold">{name.charAt(0)}</span>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold truncate">{name}</p>
+            {role && <p className="text-sm text-muted-foreground">{role}</p>}
+            {email && <p className="text-sm text-muted-foreground truncate">{email}</p>}
+          </div>
+        </div>
+      </CardContent>
+      {onAction && (
+        <CardFooter>
+          <Button variant="outline" size="sm" className="w-full" onClick={onAction}>
+            View Profile
+          </Button>
+        </CardFooter>
+      )}
+    </Card>
+  );
+}`;
+
     // Create directory structure
-    await this.sandboxService.executeCommand(sessionId, 'mkdir -p /home/user/app/app /home/user/app/lib /home/user/app/components/ui');
+    await this.sandboxService.executeCommand(sessionId, 'mkdir -p /home/user/app/app /home/user/app/lib /home/user/app/components/ui /home/user/app/components/layouts');
 
     // Write Phase 1: package.json
     await this.sandboxService.writeFile(sessionId, '/home/user/app/package.json', packageJson);
@@ -1208,6 +1605,11 @@ export { Skeleton };`;
     await this.sandboxService.writeFile(sessionId, '/home/user/app/components/ui/scroll-area.tsx', scrollAreaComponent);
     await this.sandboxService.writeFile(sessionId, '/home/user/app/components/ui/alert.tsx', alertComponent);
     await this.sandboxService.writeFile(sessionId, '/home/user/app/components/ui/skeleton.tsx', skeletonComponent);
+
+    // Write Phase 4C: Layout templates
+    await this.sandboxService.writeFile(sessionId, '/home/user/app/components/layouts/dashboard-layout.tsx', dashboardLayout);
+    await this.sandboxService.writeFile(sessionId, '/home/user/app/components/layouts/landing-layout.tsx', landingLayout);
+    await this.sandboxService.writeFile(sessionId, '/home/user/app/components/layouts/card-grid.tsx', cardGridLayout);
 
     // === PHASE 5: Install and start server ===
     this.emitActivity(sessionId, 'terminal', { output: '📦 Installing dependencies...', type: 'info' });
