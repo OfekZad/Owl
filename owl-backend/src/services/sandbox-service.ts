@@ -2,8 +2,11 @@ import { Sandbox } from '@e2b/code-interpreter';
 import { v4 as uuidv4 } from 'uuid';
 import type { Activity } from '../types/index.js';
 
-// Store active sandboxes by session ID
+// Store active sandboxes by session ID (in-memory cache)
 const activeSandboxes = new Map<string, Sandbox>();
+
+// Store sandbox IDs for reconnection (persists across requests via closure)
+const sandboxIds = new Map<string, string>();
 
 // Callback type for broadcasting activities
 type BroadcastCallback = (sessionId: string, activity: Activity) => void;
@@ -16,14 +19,42 @@ export class SandboxService {
   }
 
   /**
+   * Get or create a sandbox - handles reconnection automatically
+   */
+  private async getOrCreateSandbox(sessionId: string): Promise<Sandbox> {
+    // Check in-memory cache first
+    if (activeSandboxes.has(sessionId)) {
+      return activeSandboxes.get(sessionId)!;
+    }
+
+    // Try to reconnect if we have a stored sandboxId
+    const storedId = sandboxIds.get(sessionId);
+    if (storedId) {
+      try {
+        const sandbox = await Sandbox.connect(storedId);
+        activeSandboxes.set(sessionId, sandbox);
+        return sandbox;
+      } catch {
+        // Sandbox expired or not found, will create new one
+        sandboxIds.delete(sessionId);
+      }
+    }
+
+    // No sandbox exists, return null to signal creation needed
+    throw new Error('NO_SANDBOX');
+  }
+
+  /**
    * Create a new E2B sandbox for a session
    */
   async createSandbox(sessionId: string): Promise<{ sandboxId: string; previewUrl: string }> {
-    // Check if sandbox already exists for this session
-    if (activeSandboxes.has(sessionId)) {
-      const existing = activeSandboxes.get(sessionId)!;
+    // Check if we can reconnect to existing sandbox
+    try {
+      const existing = await this.getOrCreateSandbox(sessionId);
       const previewUrl = await this.getPreviewUrl(existing);
       return { sandboxId: existing.sandboxId, previewUrl };
+    } catch {
+      // Need to create new sandbox
     }
 
     // Broadcast sandbox creation start
@@ -33,12 +64,14 @@ export class SandboxService {
     });
 
     try {
-      // Create new sandbox
+      // Create new sandbox with longer timeout
       const sandbox = await Sandbox.create({
-        timeoutMs: 10 * 60 * 1000, // 10 minutes timeout
+        timeoutMs: 30 * 60 * 1000, // 30 minutes timeout
       });
 
+      // Store in both maps
       activeSandboxes.set(sessionId, sandbox);
+      sandboxIds.set(sessionId, sandbox.sandboxId);
 
       // Get the preview URL
       const previewUrl = await this.getPreviewUrl(sandbox);
@@ -68,9 +101,11 @@ export class SandboxService {
    * Execute a command in the sandbox
    */
   async executeCommand(sessionId: string, command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    const sandbox = activeSandboxes.get(sessionId);
-    if (!sandbox) {
-      throw new Error('No active sandbox for this session');
+    let sandbox: Sandbox;
+    try {
+      sandbox = await this.getOrCreateSandbox(sessionId);
+    } catch {
+      throw new Error('No active sandbox for this session. Please start a new chat.');
     }
 
     // Broadcast command execution start
@@ -122,8 +157,10 @@ export class SandboxService {
    * Write a file to the sandbox
    */
   async writeFile(sessionId: string, path: string, content: string): Promise<void> {
-    const sandbox = activeSandboxes.get(sessionId);
-    if (!sandbox) {
+    let sandbox: Sandbox;
+    try {
+      sandbox = await this.getOrCreateSandbox(sessionId);
+    } catch {
       throw new Error('No active sandbox for this session');
     }
 
@@ -149,8 +186,10 @@ export class SandboxService {
    * Read a file from the sandbox
    */
   async readFile(sessionId: string, path: string): Promise<string> {
-    const sandbox = activeSandboxes.get(sessionId);
-    if (!sandbox) {
+    let sandbox: Sandbox;
+    try {
+      sandbox = await this.getOrCreateSandbox(sessionId);
+    } catch {
       throw new Error('No active sandbox for this session');
     }
 
@@ -170,8 +209,10 @@ export class SandboxService {
    * List files in a directory
    */
   async listFiles(sessionId: string, path: string = '/'): Promise<Array<{ name: string; isDir: boolean }>> {
-    const sandbox = activeSandboxes.get(sessionId);
-    if (!sandbox) {
+    let sandbox: Sandbox;
+    try {
+      sandbox = await this.getOrCreateSandbox(sessionId);
+    } catch {
       throw new Error('No active sandbox for this session');
     }
 
@@ -194,8 +235,10 @@ export class SandboxService {
    * Start a dev server and return the preview URL
    */
   async startDevServer(sessionId: string, port: number = 3000): Promise<string> {
-    const sandbox = activeSandboxes.get(sessionId);
-    if (!sandbox) {
+    let sandbox: Sandbox;
+    try {
+      sandbox = await this.getOrCreateSandbox(sessionId);
+    } catch {
       throw new Error('No active sandbox for this session');
     }
 

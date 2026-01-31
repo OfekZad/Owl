@@ -144,6 +144,12 @@ export class ChatService {
   }
 
   private async getFileState(sessionId: string): Promise<string> {
+    // Don't try to read if no sandbox exists
+    const status = this.sandboxService.getSandboxStatus(sessionId);
+    if (!status.active) {
+      return '\n(New project - no files yet)';
+    }
+
     const files: string[] = [];
 
     for (const filePath of CONTEXT_FILES) {
@@ -151,7 +157,7 @@ export class ChatService {
         const content = await this.sandboxService.readFile(sessionId, `/home/user/app/${filePath}`);
         files.push(`\n### ${filePath}\n\`\`\`\n${content}\n\`\`\``);
       } catch {
-        // File doesn't exist, skip
+        // File doesn't exist or sandbox issue, skip silently
       }
     }
 
@@ -166,10 +172,10 @@ export class ChatService {
         files.push(`\n### Other files in app/\n${otherFiles.join(', ')}`);
       }
     } catch {
-      // Directory doesn't exist
+      // Directory doesn't exist or sandbox issue
     }
 
-    return files.join('\n');
+    return files.length > 0 ? files.join('\n') : '\n(No files found)';
   }
 
   private async executeTool(sessionId: string, name: string, input: Record<string, string>): Promise<string> {
