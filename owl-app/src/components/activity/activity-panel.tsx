@@ -17,6 +17,24 @@ export function ActivityPanel({ sessionId, backendUrl = 'http://localhost:3001' 
   const [activities, setActivities] = useState<Activity[]>([]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
+  // Fetch existing session data to get preview URL if available
+  useEffect(() => {
+    const fetchSession = async () => {
+      try {
+        const response = await fetch(`${backendUrl}/api/sessions/${sessionId}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.session?.previewUrl) {
+            setPreviewUrl(data.session.previewUrl);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch session:', error);
+      }
+    };
+    fetchSession();
+  }, [sessionId, backendUrl]);
+
   useEffect(() => {
     // Connect to WebSocket for real-time activity updates
     const ws = new WebSocket(`${backendUrl.replace('http', 'ws')}/ws?sessionId=${sessionId}`);
