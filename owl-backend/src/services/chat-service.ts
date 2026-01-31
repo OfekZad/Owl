@@ -213,6 +213,9 @@ export class ChatService {
     try {
       switch (name) {
         case 'write_file': {
+          if (!input.content) {
+            return 'Error: content parameter is required but was missing from tool call. Please retry with the file content.';
+          }
           const fullPath = `/home/user/app/${input.path}`;
           const dir = fullPath.substring(0, fullPath.lastIndexOf('/'));
 
