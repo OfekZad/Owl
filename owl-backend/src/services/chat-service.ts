@@ -35,6 +35,7 @@ const TOOLS: Anthropic.Tool[] = [
 // Files to include in Claude's context
 const CONTEXT_FILES = [
   'package.json',
+  'tsconfig.json',
   'tailwind.config.ts',
   'postcss.config.js',
   'lib/utils.ts',
@@ -342,6 +343,30 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }`;
 
+    const tsconfigJson = JSON.stringify({
+      compilerOptions: {
+        target: "ES2017",
+        lib: ["dom", "dom.iterable", "esnext"],
+        allowJs: true,
+        skipLibCheck: true,
+        strict: true,
+        noEmit: true,
+        esModuleInterop: true,
+        module: "esnext",
+        moduleResolution: "bundler",
+        resolveJsonModule: true,
+        isolatedModules: true,
+        jsx: "preserve",
+        incremental: true,
+        plugins: [{ name: "next" }],
+        paths: {
+          "@/*": ["./*"]
+        }
+      },
+      include: ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+      exclude: ["node_modules"]
+    }, null, 2);
+
     // === PHASE 3: Styles ===
     const globalsCss = `@tailwind base;
 @tailwind components;
@@ -442,6 +467,7 @@ export default function RootLayout({
     await this.sandboxService.writeFile(sessionId, '/home/user/app/package.json', packageJson);
 
     // Write Phase 2: Config files (BEFORE npm install)
+    await this.sandboxService.writeFile(sessionId, '/home/user/app/tsconfig.json', tsconfigJson);
     await this.sandboxService.writeFile(sessionId, '/home/user/app/tailwind.config.ts', tailwindConfig);
     await this.sandboxService.writeFile(sessionId, '/home/user/app/postcss.config.js', postcssConfig);
     await this.sandboxService.writeFile(sessionId, '/home/user/app/lib/utils.ts', utilsTs);
